@@ -1,5 +1,4 @@
 use clap::{Args, Parser, Subcommand};
-use std::env;
 
 // Available if you need it!
 // use serde_bencode
@@ -44,8 +43,7 @@ fn main() {
     match cli.commands {
         Commands::Decode(args) => {
             let encoded_value = args.value;
-            //let decoded_value = decode_bencoded_value(&encoded_value);
-            let decoded_value: i64 = serde_bencode::from_str(&encoded_value).unwrap();
+            let decoded_value: String = serde_bencode::from_str(&encoded_value).unwrap();
             println!("{}", decoded_value);
         }
     }

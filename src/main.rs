@@ -1,3 +1,4 @@
+use clap::{Args, Parser, Subcommand};
 use std::env;
 
 // Available if you need it!
@@ -18,17 +19,34 @@ fn decode_bencoded_value(encoded_value: &str) -> serde_json::Value {
     }
 }
 
+#[derive(Parser)]
+#[clap(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    commands: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Decode(DecodeArgs),
+}
+
+#[derive(Args)]
+struct DecodeArgs {
+    value: String,
+}
+
 // Usage: your_bittorrent.sh decode "<encoded_value>"
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let command = &args[1];
+    let cli = Cli::parse();
 
-    if command == "decode" {
-        // Uncomment this block to pass the first stage
-        let encoded_value = &args[2];
-        let decoded_value = decode_bencoded_value(encoded_value);
-        println!("{}", decoded_value);
-    } else {
-        println!("unknown command: {}", args[1])
+    match cli.commands {
+        Commands::Decode(args) => {
+            let encoded_value = args.value;
+            //let decoded_value = decode_bencoded_value(&encoded_value);
+            let decoded_value: i32 = serde_bencode::from_str(&encoded_value).unwrap();
+            println!("{}", decoded_value);
+        }
     }
 }

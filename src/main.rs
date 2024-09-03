@@ -45,7 +45,7 @@ fn main() {
         Commands::Decode(args) => {
             let encoded_value = args.value;
             //let decoded_value = decode_bencoded_value(&encoded_value);
-            let decoded_value: i32 = serde_bencode::from_str(&encoded_value).unwrap();
+            let decoded_value: i64 = serde_bencode::from_str(&encoded_value).unwrap();
             println!("{}", decoded_value);
         }
     }

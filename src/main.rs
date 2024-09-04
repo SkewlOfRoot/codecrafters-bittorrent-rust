@@ -51,6 +51,7 @@ fn read_torrent_file(file_name: String) -> anyhow::Result<()> {
     file.read_to_end(&mut buffer)?;
 
     let content = String::from_utf8_lossy(&buffer);
+    eprintln!("file content: {}", content);
     let content = decode_bencoded_value(&content)?;
     eprintln!("{}", content);
 

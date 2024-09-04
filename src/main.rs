@@ -53,10 +53,10 @@ fn read_torrent_file(file_name: String) -> anyhow::Result<()> {
     let content = String::from_utf8_lossy(&buffer);
     eprintln!("file content: {}", content);
     let content = decode_bencoded_value(&content)?;
-    eprintln!("{}", content);
+    eprintln!("decoded content: {}", content);
 
     let map = content.as_object().unwrap();
-    eprintln!("{:#?}", map);
+    eprintln!("map: {:#?}", map);
     let tracker_url = map.get("announce").unwrap();
     let file_length = map.get("length").unwrap();
 
@@ -92,7 +92,7 @@ fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Val
             let val = d
                 .into_iter()
                 .map(|(k, v)| {
-                    let key = String::from_utf8(k)?;
+                    let key = String::from_utf8_lossy(&k).to_string();
                     let value = convert(v)?;
                     Ok((key, value))
                 })

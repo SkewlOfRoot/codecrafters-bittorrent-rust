@@ -57,7 +57,6 @@ fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Val
             Ok(serde_json::Value::Array(val))
         }
         serde_bencode::value::Value::Dict(d) => {
-            println!("{:#?}", d);
             let val = d
                 .into_iter()
                 .map(|(k, v)| {

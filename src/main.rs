@@ -74,8 +74,8 @@ fn decode_bencoded_value(encoded_value: &str) -> anyhow::Result<serde_json::Valu
 fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Value> {
     match value {
         serde_bencode::value::Value::Bytes(b) => {
-            let s = String::from_utf8(b)?;
-            Ok(serde_json::Value::String(s))
+            let s = String::from_utf8_lossy(&b);
+            Ok(serde_json::Value::String(s.to_string()))
         }
         serde_bencode::value::Value::Int(i) => {
             Ok(serde_json::Value::Number(serde_json::Number::from(i)))

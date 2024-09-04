@@ -1,3 +1,4 @@
+use anyhow::Ok;
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser)]
@@ -55,8 +56,17 @@ fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Val
 
             Ok(serde_json::Value::Array(val))
         }
-        _ => {
-            panic!("Unhandled encoded value: {:?}", value)
+        serde_bencode::value::Value::Dict(d) => {
+            println!("{:#?}", d);
+            let val = d
+                .into_iter()
+                .map(|(k, v)| {
+                    let key = String::from_utf8(k)?;
+                    let value = convert(v)?;
+                    Ok((key, value))
+                })
+                .collect::<anyhow::Result<serde_json::Map<String, serde_json::Value>>>()?;
+            Ok(serde_json::Value::Object(val))
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use anyhow::Ok;
 use clap::{Args, Parser, Subcommand};
 
@@ -12,11 +14,17 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Decode(DecodeArgs),
+    Info(InfoArgs),
 }
 
 #[derive(Args)]
 struct DecodeArgs {
     value: String,
+}
+
+#[derive(Args)]
+struct InfoArgs {
+    file_name: String,
 }
 
 // Usage: your_bittorrent.sh decode "<encoded_value>"
@@ -30,7 +38,30 @@ fn main() -> anyhow::Result<()> {
             println!("{}", decoded_value);
             Ok(())
         }
+        Commands::Info(args) => {
+            read_torrent_file(args.file_name)?;
+            Ok(())
+        }
     }
+}
+
+fn read_torrent_file(file_name: String) -> anyhow::Result<()> {
+    let mut file = std::fs::File::open(file_name)?;
+    let mut buffer: Vec<u8> = Vec::new();
+    file.read_to_end(&mut buffer)?;
+
+    let content = String::from_utf8_lossy(&buffer);
+    let content = decode_bencoded_value(&content)?;
+    eprintln!("{}", content);
+
+    let map = content.as_object().unwrap();
+    eprintln!("{:#?}", map);
+    let tracker_url = map.get("announce").unwrap();
+    let file_length = map.get("length").unwrap();
+
+    println!("Tracker URL: {}", tracker_url);
+    println!("Length: {}", file_length);
+    Ok(())
 }
 
 #[allow(dead_code)]

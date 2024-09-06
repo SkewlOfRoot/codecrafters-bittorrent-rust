@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use sha1::{self, Digest, Sha1};
 use std::collections::HashMap;
 
 use anyhow::Ok;
@@ -44,6 +45,7 @@ fn main() -> anyhow::Result<()> {
 
             println!("Tracker URL: {}", torrent.announce);
             println!("Length: {}", torrent.info.length);
+            println!("Info Hash: {}", hex::encode(torrent.info_hash));
 
             Ok(())
         }
@@ -69,6 +71,7 @@ fn read_torrent_file(file_name: String) -> anyhow::Result<Torrent> {
                     piece_length: extract_int("piece length", &info)?,
                     pieces: extract_bytes("pieces", &info)?,
                 },
+                info_hash: hash_dict(&info),
             })
         }
         _ => Err(anyhow!("Incorrect format, required dict")),
@@ -159,9 +162,19 @@ fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Val
     }
 }
 
+fn hash_dict(d: &HashMap<Vec<u8>, serde_bencode::value::Value>) -> Vec<u8> {
+    let mut hasher = Sha1::new();
+    let encoded: Vec<u8> = bincode::serialize(d).unwrap();
+    hasher.update(&encoded);
+
+    let result = hasher.finalize();
+    result[..].to_vec()
+}
+
 struct Torrent {
     announce: String,
     info: TorrentInfo,
+    info_hash: Vec<u8>,
 }
 
 #[allow(dead_code)]

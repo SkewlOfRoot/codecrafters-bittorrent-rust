@@ -1,4 +1,5 @@
-use std::io::Read;
+use anyhow::anyhow;
+use std::collections::HashMap;
 
 use anyhow::Ok;
 use clap::{Args, Parser, Subcommand};
@@ -39,33 +40,89 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         Commands::Info(args) => {
-            read_torrent_file(args.file_name)?;
+            let torrent = read_torrent_file(args.file_name)?;
+
+            println!("Tracker URL: {}", torrent.announce);
+            println!("Length: {}", torrent.info.length);
+
             Ok(())
         }
     }
 }
 
-fn read_torrent_file(file_name: String) -> anyhow::Result<()> {
-    let mut file = std::fs::File::open(file_name)?;
-    let mut buffer: Vec<u8> = Vec::new();
-    file.read_to_end(&mut buffer)?;
+fn read_torrent_file(file_name: String) -> anyhow::Result<Torrent> {
+    let content = std::fs::read(file_name)?;
 
-    let content = String::from_utf8_lossy(&buffer);
-    eprintln!("file content: {}", content);
-    let content = decode_bencoded_value(&content)?;
-    eprintln!("decoded content: {}", content);
+    let value: serde_bencode::value::Value = serde_bencode::from_bytes(content.as_slice())?;
 
-    let map = content.as_object().unwrap();
-    eprintln!("map: {:#?}", map);
-    let tracker_url = map.get("announce").unwrap();
-    let file_length = map.get("length").unwrap();
+    match value {
+        serde_bencode::value::Value::Dict(d) => {
+            let announce = extract_string("announce", &d)?;
 
-    println!("Tracker URL: {}", tracker_url);
-    println!("Length: {}", file_length);
-    Ok(())
+            let info = extract_dict("info", &d)?;
+
+            Ok(Torrent {
+                announce,
+                info: TorrentInfo {
+                    name: extract_string("name", &info)?,
+                    length: extract_int("length", &info)?,
+                    piece_length: extract_int("piece_length", &info)?,
+                    pieces: extract_bytes("pieces", &info)?,
+                },
+            })
+        }
+        _ => Err(anyhow!("Incorrect format, required dict")),
+    }
 }
 
-#[allow(dead_code)]
+fn extract_string(
+    key: &str,
+    d: &HashMap<Vec<u8>, serde_bencode::value::Value>,
+) -> anyhow::Result<String> {
+    d.get(key.as_bytes())
+        .and_then(|v| match v {
+            serde_bencode::value::Value::Bytes(b) => String::from_utf8(b.clone()).ok(),
+            _ => None,
+        })
+        .ok_or(anyhow!("Missing field: {}", key))
+}
+
+fn extract_dict(
+    key: &str,
+    d: &HashMap<Vec<u8>, serde_bencode::value::Value>,
+) -> anyhow::Result<HashMap<Vec<u8>, serde_bencode::value::Value>> {
+    d.get(key.as_bytes())
+        .and_then(|v| match v {
+            serde_bencode::value::Value::Dict(d) => Some(d.clone()),
+            _ => None,
+        })
+        .ok_or(anyhow!("Missing field: {}", key))
+}
+
+fn extract_int(
+    key: &str,
+    d: &HashMap<Vec<u8>, serde_bencode::value::Value>,
+) -> anyhow::Result<i64> {
+    d.get(key.as_bytes())
+        .and_then(|v| match v {
+            serde_bencode::value::Value::Int(i) => Some(*i),
+            _ => None,
+        })
+        .ok_or(anyhow!("Missing filed: {}", key))
+}
+
+fn extract_bytes(
+    key: &str,
+    d: &HashMap<Vec<u8>, serde_bencode::value::Value>,
+) -> anyhow::Result<Vec<u8>> {
+    d.get(key.as_bytes())
+        .and_then(|v| match v {
+            serde_bencode::value::Value::Bytes(b) => Some(b.clone()),
+            _ => None,
+        })
+        .ok_or(anyhow!("Missing field: {}", key))
+}
+
 fn decode_bencoded_value(encoded_value: &str) -> anyhow::Result<serde_json::Value> {
     let value: serde_bencode::value::Value = serde_bencode::from_str(encoded_value)?;
     convert(value)
@@ -74,8 +131,8 @@ fn decode_bencoded_value(encoded_value: &str) -> anyhow::Result<serde_json::Valu
 fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Value> {
     match value {
         serde_bencode::value::Value::Bytes(b) => {
-            let s = String::from_utf8_lossy(&b);
-            Ok(serde_json::Value::String(s.to_string()))
+            let s = String::from_utf8(b)?;
+            Ok(serde_json::Value::String(s))
         }
         serde_bencode::value::Value::Int(i) => {
             Ok(serde_json::Value::Number(serde_json::Number::from(i)))
@@ -92,7 +149,7 @@ fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Val
             let val = d
                 .into_iter()
                 .map(|(k, v)| {
-                    let key = String::from_utf8_lossy(&k).to_string();
+                    let key = String::from_utf8(k)?;
                     let value = convert(v)?;
                     Ok((key, value))
                 })
@@ -100,4 +157,16 @@ fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Val
             Ok(serde_json::Value::Object(val))
         }
     }
+}
+
+struct Torrent {
+    announce: String,
+    info: TorrentInfo,
+}
+
+struct TorrentInfo {
+    name: String,
+    length: i64,
+    piece_length: i64,
+    pieces: Vec<u8>,
 }

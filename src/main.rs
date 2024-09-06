@@ -66,7 +66,7 @@ fn read_torrent_file(file_name: String) -> anyhow::Result<Torrent> {
                 info: TorrentInfo {
                     name: extract_string("name", &info)?,
                     length: extract_int("length", &info)?,
-                    piece_length: extract_int("piece_length", &info)?,
+                    piece_length: extract_int("piece length", &info)?,
                     pieces: extract_bytes("pieces", &info)?,
                 },
             })
@@ -164,6 +164,7 @@ struct Torrent {
     info: TorrentInfo,
 }
 
+#[allow(dead_code)]
 struct TorrentInfo {
     name: String,
     length: i64,

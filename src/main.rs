@@ -1,9 +1,10 @@
 use anyhow::anyhow;
-use sha1::{self, Digest, Sha1};
-use std::collections::HashMap;
-
 use anyhow::Ok;
 use clap::{Args, Parser, Subcommand};
+
+use serde::{Deserialize, Serialize};
+use sha1::{self, Digest, Sha1};
+use std::collections::HashMap;
 
 #[derive(Parser)]
 #[clap(version, about, long_about = None)]
@@ -43,8 +44,12 @@ fn main() -> anyhow::Result<()> {
         Commands::Info(args) => {
             let torrent = read_torrent_file(args.file_name)?;
 
+            eprintln!("{torrent:?}");
+
             println!("Tracker URL: {}", torrent.announce);
             println!("Length: {}", torrent.info.length);
+            //Expected hash: 70edcac2611a8829ebf467a6849f5d8408d9d8f4
+
             println!("Info Hash: {}", hex::encode(torrent.info_hash));
 
             Ok(())
@@ -55,28 +60,72 @@ fn main() -> anyhow::Result<()> {
 fn read_torrent_file(file_name: String) -> anyhow::Result<Torrent> {
     let content = std::fs::read(file_name)?;
 
-    let value: serde_bencode::value::Value = serde_bencode::from_bytes(content.as_slice())?;
+    //let t: Torrent = serde_bencode::from_bytes(content.as_slice())?;
 
+    //println!("t: {:#?}", t);
+    let value: serde_bencode::value::Value = serde_bencode::from_bytes(content.as_slice())?;
+    //Ok(t)
     match value {
         serde_bencode::value::Value::Dict(d) => {
             let announce = extract_string("announce", &d)?;
 
             let info = extract_dict("info", &d)?;
 
+            let val = d.get("info".as_bytes()).unwrap();
+
+            // HashMap::from_iter(
+            //     info.into_iter()
+            //         .map(|(k, v)| (serde_bencode::from_str(String::from_utf8(k)?.as_str()), v))
+            //         .into_iter(),
+            // );
+
+            //for (k, v) in &info.values().into_iter().collect() {}
+            let mut h: HashMap<String, Vec<u8>> = HashMap::new();
+
+            let length = extract_int("length", &info)?;
+            let name = extract_string("name", &info)?;
+            let piece_length = extract_int("piece length", &info)?;
+            let pieces = extract_bytes("pieces", &info)?;
+            h.insert("length".to_string(), bincode::serialize(&length).unwrap());
+            h.insert("name".to_string(), bincode::serialize(&name).unwrap());
+            h.insert(
+                "piece_length".to_string(),
+                bincode::serialize(&piece_length).unwrap(),
+            );
+            h.insert("pieces".to_string(), pieces.clone());
+
             Ok(Torrent {
                 announce,
                 info: TorrentInfo {
-                    name: extract_string("name", &info)?,
-                    length: extract_int("length", &info)?,
-                    piece_length: extract_int("piece length", &info)?,
-                    pieces: extract_bytes("pieces", &info)?,
+                    length,
+                    name,
+                    piece_length,
+                    pieces,
                 },
-                info_hash: hash_dict(&info),
+                info_hash: hash_dict(&h)?,
             })
         }
         _ => Err(anyhow!("Incorrect format, required dict")),
     }
 }
+
+fn hash_dict(h: &HashMap<String, Vec<u8>>) -> anyhow::Result<Vec<u8>> {
+    let mut hasher = Sha1::new();
+    let encoded: Vec<u8> = bincode::serialize(h).unwrap();
+    hasher.update(&encoded);
+
+    let result = hasher.finalize();
+    Ok(result[..].to_vec())
+}
+
+// fn hash_dict(d: &serde_bencode::value::Value) -> anyhow::Result<Vec<u8>> {
+//     let mut hasher = Sha1::new();
+//     let encoded: Vec<u8> = bincode::serialize(d).unwrap();
+//     hasher.update(&encoded);
+
+//     let result = hasher.finalize();
+//     Ok(result[..].to_vec())
+// }
 
 fn extract_string(
     key: &str,
@@ -162,15 +211,25 @@ fn convert(value: serde_bencode::value::Value) -> anyhow::Result<serde_json::Val
     }
 }
 
-fn hash_dict(d: &HashMap<Vec<u8>, serde_bencode::value::Value>) -> Vec<u8> {
-    let mut hasher = Sha1::new();
-    let encoded: Vec<u8> = bincode::serialize(d).unwrap();
-    hasher.update(&encoded);
+// fn hash_dict(d: &HashMap<Vec<u8>, serde_bencode::value::Value>) -> anyhow::Result<Vec<u8>> {
+//     let mut new_map: HashMap<String, serde_bencode::value::Value> = HashMap::new();
 
-    let result = hasher.finalize();
-    result[..].to_vec()
-}
+//     for (k, v) in d {
+//         let new_key = serde_bencode::to_string(&String::from_utf8(k.to_vec()).unwrap())?;
+//         new_map.insert(new_key, v.clone());
+//     }
+//     println!("Org map: {:#?}", d);
+//     println!("New map: {:#?}", new_map);
 
+//     let mut hasher = Sha1::new();
+//     let encoded: Vec<u8> = bincode::serialize(&new_map).unwrap();
+//     hasher.update(&encoded);
+
+//     let result = hasher.finalize();
+//     Ok(result[..].to_vec())
+// }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct Torrent {
     announce: String,
     info: TorrentInfo,
@@ -178,9 +237,11 @@ struct Torrent {
 }
 
 #[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct TorrentInfo {
-    name: String,
     length: i64,
+    name: String,
+    #[serde(rename = "piece length")]
     piece_length: i64,
     pieces: Vec<u8>,
 }
